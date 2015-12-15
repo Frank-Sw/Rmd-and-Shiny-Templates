@@ -4,4 +4,4 @@ This repository contains my frequently used templates for R Markdown and Shiny a
 
 ## Ownership
 
-Many templates I used hvae either been inspired or taken wholesale from others, I have attributed authors/resources where possible within each template folder using folder specific Readme.md files.
+Many templates I used have either been inspired or taken wholesale from others, I have attributed authors/resources where possible within each template folder using folder specific Readme.md files.
