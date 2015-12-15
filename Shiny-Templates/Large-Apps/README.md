@@ -1,4 +1,4 @@
-# Large Shiny Apps
+# Large Shiny Apps with NavbarPage Layout
 
 This template is useful for the development of large Shiny apps utilising the `navbarPage` layout, the features are as follows:
 
