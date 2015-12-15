@@ -1,10 +1,13 @@
 # Large Shiny Apps with NavbarPage Layout
 
+![Screenshot of app](https://raw.githubusercontent.com/martinjhnhadley/Rmd-and-Shiny-Templates/master/Shiny-Templates/Large-Apps/screenshot.png "Optional Title")
+
 This template is useful for the development of large Shiny apps utilising the `navbarPage` layout, the features are as follows:
 
 - `navbarMenu` items are contained within distinct `.R` files
 - Visualisations/UI and data processing are separated into distinct folders
 - Anchor links to individual pages (requires javascript and takes ~3 second to redirect) thanks to https://github.com/rstudio/shiny/issues/772#issuecomment-112919149
+
 
 # Structure
 
