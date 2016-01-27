@@ -47,6 +47,32 @@ shinyServer(function(input, output, session){
 
   ### ============= Main Map Section ========================= ###
   
+  output$show_timeslider_UI <- renderUI({
+    checkboxInput("show_timeslider", label = "Filter data by date?", value = TRUE)
+  })
+  
+  output$show_letters_before_date_UI <- renderUI({
+    
+    dates <- example_map_data$Date
+    if (is.null(input$show_timeslider)) {
+      return()
+    }
+    
+    if (input$show_timeslider == FALSE) {
+      sliderInput(
+        "show_letters_before_date", "Show letters up to",
+        min = min(dates),
+        max = max(dates),
+        step = 365*24*60*60,
+        value = min(dates),
+        width = "800px",
+        timeFormat = "%F",
+        animate = animationOptions(interval = 500, loop = FALSE)
+      )
+    }
+    
+  })
+  
   output$time_period_of_interest_UI <- renderUI({
     dates <- example_map_data$Date
     if (is.null(input$show_timeslider)) {
@@ -58,7 +84,7 @@ shinyServer(function(input, output, session){
         "time_period_of_interest", "Time period of interest:",
         min = min(dates),
         max = max(dates),
-        step = 1,
+        step = 10,
         value = c(min(dates), max(dates)),
         width = "800px",
         timeFormat = "%F"
@@ -66,13 +92,14 @@ shinyServer(function(input, output, session){
     }
   })
   
-  output$show_timeslider_UI <- renderUI({
-    checkboxInput("show_timeslider", label = "Filter data by date?", value = TRUE)
-  })
-  
+
   ### ==== Location Tallies
   
   location_tallies <- reactive({
+    
+    if(is.null(input$show_timeslider)){
+      return()
+    }
     
     if(input$show_timeslider == TRUE){
       subset_entries <- subset(example_map_data,
@@ -80,7 +107,9 @@ shinyServer(function(input, output, session){
                                  Date <= as.POSIXct(paste0(input$time_period_of_interest[2]+1,"/01/01")))
       
     } else {
-      subset_entries <- example_map_data
+      subset_entries <- subset(example_map_data,
+                                 Date <= as.POSIXct(paste0(input$show_letters_before_date,"/01/01")))
+      
     }
     
     if(empty(subset_entries)){

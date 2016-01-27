@@ -50,10 +50,10 @@ shinyUI(fluidPage(
 #   ),
   sidebarLayout(
     sidebarPanel(
-      uiOutput("show_letters_where_receive_unknown_UI"),
       uiOutput("show_timeslider_UI"),
       # uiOutput("legend_type_UI"),
       uiOutput("time_period_of_interest_UI"),
+      uiOutput("show_letters_before_date_UI"),
       HTML(
         "<p>This Shiny app is a template designed by Martin Hadley in the IT Services Department of Oxford University for the Live Data Project</p>",
         "<p>The template takes a .csv file with the following structure</p>"
