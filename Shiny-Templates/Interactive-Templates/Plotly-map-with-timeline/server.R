@@ -17,54 +17,16 @@ url1 <- url2 <- ""
 ### ============= Data Processing  ========================= 
 ### ========================================================
 
-letters_maxqda_import <- read.csv(file ="data/latters-MaxQDA-Format.csv", stringsAsFactors = FALSE)
-### ======= Location df
+## Import file
+example_map_data <- read.csv(file ="data/example-map-data.csv", stringsAsFactors = FALSE)
+example_map_data$Date <- force_tz(ymd(example_map_data$Date, quiet = TRUE), tzone = "GMT")
 
-locations_vec <- unique(c(letters_maxqda_import$Sender.Location,letters_maxqda_import$Receiver.Location))
-### For historic reasons, rename as entries.with.locations (Academic wants letters without a receive location to be included)
-
-entries.with.locations <- letters_maxqda_import
-
-### ============= Add columns with combined coords for simpler processing later
-entries.with.locations$Sender.LatLong.String <- paste(
-  entries.with.locations$Sender.Location.GIS.Latitude,
-  entries.with.locations$Sender.Location.GIS.Longitude)
-entries.with.locations$Receiver.LatLong.String <- paste(
-  entries.with.locations$Receiver.Location.GIS.Latitude,
-  entries.with.locations$Receiver.Location.GIS.Longitude)
-## as.character for easier processing
-entries.with.locations$Receiver.LatLong.String <- as.character(entries.with.locations$Receiver.LatLong.String)
-entries.with.locations$Sender.LatLong.String <- as.character(entries.with.locations$Sender.LatLong.String)
-
-## Drop element where send == receive
-entries.with.locations <- entries.with.locations[entries.with.locations$Sender.LatLong.String != entries.with.locations$Receiver.LatLong.String,]
-
-## Interpret dates as dmy and force as GMT
-entries.with.locations$Date <- force_tz(dmy(entries.with.locations$Date, quiet = TRUE), tzone = "GMT")
-## Find any dates in the future
-future.test <- entries.with.locations$Date > as.POSIXct("2016/01/01")
-## Remove these dates!
-entries.with.locations <- entries.with.locations[!mapvalues(future.test, c(FALSE,NA,TRUE),c(FALSE,FALSE,TRUE)),]
-
-## Filter by geographic element:
-get.country <- function(location_string){
-  if(location_string == "" | location_string == "Schiff Sorrento"){
-    "NA"
-  } else {
-    # strsplit(location_string, ",")[1]
-    sapply(strsplit(location_string, ","), "[[", 1)
-  }
-}
-entries.with.locations$Sender.Country <- unlist(lapply(entries.with.locations$Sender.Location, function(x) get.country(x)))
-entries.with.locations$Receiver.Country <- unlist(lapply(entries.with.locations$Receiver.Location, function(x) get.country(x)))
-
-all_countries <- unique(c(entries.with.locations$Sender.Country, entries.with.locations$Receiver.Country))
+## Coerce dates into dates:
+all_countries <- unique(c(example_map_data$Sender.Country, example_map_data$Receiver.Country))
 
 ## Make a set of location -> name replacements
-location_name_df <- data.frame("LatLong" = c(entries.with.locations$Sender.LatLong.String,entries.with.locations$Receiver.LatLong.String),
-                               "Location.Name" = c(entries.with.locations$Sender.Location, entries.with.locations$Receiver.Location))
-## Drop those without specific location
-location_name_df <- location_name_df[location_name_df$LatLong != "NA NA",]
+location_name_df <- data.frame("LatLong" = c(example_map_data$Sender.LatLong.String,example_map_data$Receiver.LatLong.String),
+                               "Location.Name" = c(example_map_data$Sender.Location, example_map_data$Receiver.Location))
 
 ### ============= Find duplicate locations
 location_name_df <- location_name_df[!duplicated(location_name_df),]
@@ -76,30 +38,22 @@ location_name_df <- location_name_df[!duplicated(location_name_df$LatLong),]
 
 ### ============= Letter Series
 
-entries.with.locations$Letter.Series <- as.factor(entries.with.locations$Letter.Series)
+example_map_data$Category <- as.factor(example_map_data$Category)
+                                       
+### ============= shinyServer =============================                                      
+### =======================================================
 
 shinyServer(function(input, output, session){
-  ### ============= Useful Visualisations Tools ========================= ###
-  
-  ## ggplot Color Function from http://stackoverflow.com/a/8197703/1659890
-  gg_color_hue <- function(n) {
-    hues = seq(15, 375, length = n + 1)
-    hcl(h = hues, l = 65, c = 100)[1:n]
-  }
-  
+
   ### ============= Main Map Section ========================= ###
   
-  
   output$time_period_of_interest_UI <- renderUI({
-    
-    dates <- letters.for.analysis()$Date[!is.na(letters.for.analysis()$Date)]
-    
-    if(is.null(input$show_timeslider)){
+    dates <- example_map_data$Date
+    if (is.null(input$show_timeslider)) {
       return()
     }
     
-    
-    if(input$show_timeslider == TRUE){
+    if (input$show_timeslider == TRUE) {
       sliderInput(
         "time_period_of_interest", "Time period of interest:",
         min = min(dates),
@@ -110,63 +64,40 @@ shinyServer(function(input, output, session){
         timeFormat = "%F"
       )
     }
-    
   })
   
   output$show_timeslider_UI <- renderUI({
     checkboxInput("show_timeslider", label = "Filter data by date?", value = TRUE)
   })
   
-  ## Decide whether letters without receive are shown:
-  
-  letters.for.analysis <- reactive({
-    
-    
-    entries.with.locations
-    
-  })
-  
-  ## change size of output map
-  
-  output$map_size_numeric <- renderText({
-    
-    if(is.null(input$show_letters_where_receive_unknown)){
-      "1400px"
-    }
-    
-    if(input$show_letters_where_receive_unknown){
-      "1400px"
-    } else {
-      "1000px"
-    }
-    
-  })
-  
-  
   ### ==== Location Tallies
   
   location_tallies <- reactive({
     
     if(input$show_timeslider == TRUE){
-      subset_entries <- subset(letters.for.analysis(),
-                               Date >= as.POSIXct(paste0(input$time_period_of_interest[1],"/01/01")) &
-                                 Date <= as.POSIXct(paste0(input$time_period_of_interest[2],"/12/31")))
+      subset_entries <- subset(example_map_data,
+                               Date >= as.POSIXct(paste0(input$time_period_of_interest[1]-1,"/12/31")) &
+                                 Date <= as.POSIXct(paste0(input$time_period_of_interest[2]+1,"/01/01")))
+      
     } else {
-      subset_entries <- letters.for.analysis()
+      subset_entries <- example_map_data
+    }
+    
+    if(empty(subset_entries)){
+      return()
     }
     
     
+    
     all_locations <- unique(c(subset_entries$Sender.LatLong.String, subset_entries$Receiver.LatLong.String))
-    ## Drop NA
-    all_locations <- all_locations[all_locations != "NA NA"]
     
     ## sent location tallies
     sent_tallies <- table(subset_entries$Sender.LatLong.String)
     sent_tallies <- as.data.frame(sent_tallies)
     ## use mapvalues to replace names with tallies
     sent_tallies_vec <- mapvalues(all_locations, from = sent_tallies$Var1, to = sent_tallies$Freq)
-    ## use string length > 10 to send latlog.strings to 0
-    sent_tallies_vec[nchar(sent_tallies_vec) > 10] <- 0
+    ## Find latlongs by looking for " " and replace values with 0
+    sent_tallies_vec[grepl(" ",sent_tallies_vec)] <- 0
     ## convert to numeric:
     sent_tallies_vec <- as.numeric(sent_tallies_vec)
     
@@ -175,181 +106,80 @@ shinyServer(function(input, output, session){
     receive_tallies <- as.data.frame(receive_tallies)
     ## use mapvalues to replace names with tallies
     receive_tallies_vec <- mapvalues(all_locations, from = receive_tallies$Var1, to = receive_tallies$Freq)
-    ## use string length > 10 to send latlog.strings to 0
-    receive_tallies_vec[nchar(receive_tallies_vec) > 10] <- 0
+    ## Find latlongs by looking for " " and replace values with 0
+    receive_tallies_vec[grepl(" ",receive_tallies_vec)] <- 0
     ## convert to numeric:
     receive_tallies_vec <- as.numeric(receive_tallies_vec)
     
-    
+    ## Use sapply to extract out latitudes
     lat_vec <- sapply(strsplit(all_locations, " "), "[[", 1)
-    
+    ## Use sapply to extract out longitudes
     lon_vec <- sapply(strsplit(all_locations, " "), "[[", 2)
     
     ### Get location names
-    
     location_name_vec <- as.character()
     look.up.location <- function(lat_long){
       name <- location_name_df[location_name_df$LatLong == lat_long,"Location.Name"]
       name <- unique(as.character(name))[1]
       location_name_vec <<- append(location_name_vec, name)
     }
-    
     invisible(lapply(all_locations, function(x) look.up.location(x)))
-    
-    good.names <- data.frame("name" = location_name_vec, "latlong" = all_locations)
-    
-    
+
     # Spit into lat and long for plotting
     location_tallies <- data.frame("lat" = lat_vec,
                                    "lon" = lon_vec,
                                    "Letters.Sent" = sent_tallies_vec,
                                    "Letters.Received" = receive_tallies_vec,
-                                   "Name" = good.names$name)
+                                   "Name" = location_name_vec)
     
-    ## Drop instances where send tally is less than zero
-    
-    location_tallies <- location_tallies[location_tallies$Letters.Sent > 0,]
-    
-    get.country <- function(location_string){
-      if(location_string == "" | location_string == "Schiff Sorrento" | is.na(location_string)){
-        "NA"
-      } else {
-        # strsplit(location_string, ",")[1]
-        sapply(strsplit(location_string, ","), "[[", 1)
-      }
-    }
-    
-    location_tallies$Country <- unlist(lapply(as.character(location_tallies$Name), function(x) get.country(x)))
-    
-    ## Include only locations in Europe
-    location_tallies <- subset(location_tallies, Country %in% c("DEU","FRA","CHE","BEL","GBR","AUT","GDR"))
-    
-    
-    ## =====  Get letter series for each location - as a send location
+    ## =====  Get category for each location - as a send location
     ## create empty vector
-    letter.series.per.location <- as.character()
-    
-    get.letter.series.for.location <- function(location){
+    category.per.location <- as.character()
+    get.category.for.location <- function(location){
       
       send <- paste(location$lat, location$lon)
+      entries <- subset_entries[subset_entries$Sender.LatLong.String == send, ]
       
-      entries <- letters.for.analysis()[letters.for.analysis()$Sender.LatLong.String == send, ]
-      letter.series.for.route <- as.character(entries$Letter.Series)
+      letter.category.for.route <- as.character(entries$Category)
       
       if (nrow(entries) == 0) {
-        letter.series.per.location <<-
-          append(letter.series.per.location, "none sent")
+        category.per.location <<-
+          append(category.per.location, "none sent")
       } else {
-        if (length(unique(letter.series.for.route)) > 1) {
-          
-          #         switch (input$legend_type,
-          #           "Location" = letter.series.per.location <<-
-          #             append(letter.series.per.location, "multiple series"),
-          #           "Letter Series" = letter.series.per.location <<-
-          #             append(letter.series.per.location, paste0(unique(letter.series.for.route), collapse = "", sep = "<br>"))
-          #         )
-          
-          letter.series.per.location <<-
-            append(letter.series.per.location, paste0(unique(letter.series.for.route), collapse = "", sep = "<br>"))
+        if (length(unique(letter.category.for.route)) > 1) {
+
+          category.per.location <<-
+            append(category.per.location, paste0(unique(letter.category.for.route), collapse = "", sep = "<br>"))
           
         } else {
-          letter.series.per.location <<-
-            append(letter.series.per.location, unique(letter.series.for.route))
+          category.per.location <<-
+            append(category.per.location, unique(letter.category.for.route))
         }
       }
     }
-    ## populate letter.series.per.location vector
+    ## populate category.per.location vector
     for (i in 1:nrow(location_tallies)) {
-      get.letter.series.for.location(location_tallies[i,])
+      get.category.for.location(location_tallies[i,])
     }
     
-    ## Add letter.series.per.location to location_tallies
-    location_tallies$Letter.Series <-letter.series.per.location
+    ## Add category.per.location to location_tallies
+    location_tallies$Letter.Category <- category.per.location
     
     ## Order dataframe by letter series
-    location_tallies <- location_tallies[order(location_tallies$Letter.Series),]
+    location_tallies <- location_tallies[order(location_tallies$Letter.Category),]
     
     # Return object
     location_tallies
   })
   
-  ### ===== Route Tallies
-  
-  # route_tallies <- reactive({
-  #   
-  #   if(input$show_timeslider == TRUE){
-  #     subset_entries <- subset(letters.for.analysis(),
-  #                              Date >= as.POSIXct(paste0(input$time_period_of_interest[1],"/01/01")) &
-  #                                Date <= as.POSIXct(paste0(input$time_period_of_interest[2],"/12/31")))
-  #   } else {
-  #     subset_entries <- letters.for.analysis()
-  #   }
-  # 
-  #   ## Drop routes where latlong strings are "NA NA"
-  #   subset_entries <- subset_entries[subset_entries$Receiver.LatLong.String != "NA NA" & 
-  #                                      subset_entries$Sender.LatLong.String != "NA NA",]
-  #   
-  #   send_receive_pairs <- data.frame("send" = subset_entries$Sender.LatLong.String,
-  #                                    "receive" = subset_entries$Receiver.LatLong.String, stringsAsFactors = FALSE)
-  #   unique_routes <- send_receive_pairs[!duplicated(apply(send_receive_pairs,1,function(x) paste(sort(x),collapse=''))),]
-  # 
-  #   
-  #   ## ==== Route Tallies
-  #   
-  #   route_tallies <- table(paste(send_receive_pairs$send,send_receive_pairs$receive))
-  #   route_tallies <- as.data.frame(route_tallies)
-  #   # as.character(var1) for string splitting
-  #   route_tallies$Var1 <- as.character(route_tallies$Var1)
-  # 
-  #   ### ============= Split route tallies back to send/receive locations
-  #   route_tallies <- data.frame("send.lat" = sapply(strsplit(route_tallies$Var1, " "), "[[", 1),
-  #                               "send.lon" = sapply(strsplit(route_tallies$Var1, " "), "[[", 2),
-  #                               "receive.lat" = sapply(strsplit(route_tallies$Var1, " "), "[[", 3),
-  #                               "receive.lon" = sapply(strsplit(route_tallies$Var1, " "), "[[", 4),
-  #                               "Freq" = route_tallies$Freq)
-  #   
-  #   ## =====  Get letter series for each route
-  #   
-  #   ## create empty vector
-  #   letter.series.per.route <- as.character()
-  #   
-  #   get.letter.series <- function(route){
-  #     
-  #     send <- paste(route$send.lat, route$send.lon)
-  #     receive <- paste(route$receive.lat, route$receive.lon)
-  #     
-  #     
-  #     entries <<- letters.for.analysis()[letters.for.analysis()$Sender.LatLong.String == send &
-  #                                          letters.for.analysis()$Receiver.LatLong.String == receive, ]
-  #     letter.series.for.route <- as.character(entries$Letter.Series)
-  #     
-  #     if(length(unique(letter.series.for.route)) > 1){
-  #       letter.series.per.route <<- append(letter.series.per.route, "multiple series")
-  #     } else {
-  #       letter.series.per.route <<- append(letter.series.per.route, unique(letter.series.for.route))
-  #     }
-  #   }
-  #   
-  #   ## populate letter.series.per.route vector
-  #   for (i in 1:nrow(route_tallies)) {
-  #     get.letter.series(route_tallies[i,])
-  #   }
-  #   ## Add letter.series.per.route to route_tallies
-  #   route_tallies$Letter.Series <-letter.series.per.route
-  #   ## A unique id is required per trace
-  #   route_tallies$ID <- 1:nrow(route_tallies)
-  # 
-  #   # as.numeric for plotting
-  #   route_tallies$send.lat <- as.numeric(as.character(route_tallies$send.lat))
-  #   route_tallies$send.lon <- as.numeric(as.character(route_tallies$send.lon))
-  #   route_tallies$receive.lat <- as.numeric(as.character(route_tallies$receive.lat))
-  #   route_tallies$receive.lon <- as.numeric(as.character(route_tallies$receive.lon))
-  #   
-  #   # Return object
-  #   route_tallies
-  # })
-  
-  legend_position <- list(x = 1.1, y = 0.5)
+  output$nothing_to_display_UI <- renderUI({
+    
+    if(empty(location_tallies())){
+    wellPanel(
+      HTML("<p>There is no data to display!</p>")
+    )
+    }
+  })
   
   output$europe_map <- renderPlotly({
     
@@ -364,8 +194,13 @@ shinyServer(function(input, output, session){
     # route_tallies <- route_tallies()
     location_tallies <- location_tallies()
     
+    if(empty(location_tallies)){
+      return()
+    }
+    
+    
     geo_layout <- list(
-      scope = "europe",
+      scope = "world",
       showland = TRUE,
       showcountries = FALSE,
       landcolor = toRGB("gray85"),
@@ -376,21 +211,20 @@ shinyServer(function(input, output, session){
       showlakes = TRUE,
       lakecolor = "#999999")
     
-    
     ## locations first
     plot_ly(location_tallies, lon = lon, lat = lat, marker = list(size = rescale(Letters.Sent + Letters.Received, to = c(7,20))),
             type = "scattergeo", locationmode = "country",
             text = paste0("Location Name: ",Name,"<br>",
                           "Letters sent from location: ",Letters.Sent,"<br>",
                           "Letters received at location: ",Letters.Received,"<br>",
-                          "Letter Series: ",Letter.Series),
+                          "Letter Category: ",Letter.Category),
             hoverinfo = "text",inherit = FALSE,
-            group = Letter.Series, showlegend = TRUE) %>%
+            group = Letter.Category, showlegend = TRUE) %>%
       layout(
         #          title = "The ‘New’ Germans: Rethinking Integration by understanding the <br>
         #          Historical Experience of German Migrants in the US", 
         geo = geo_layout,
-        legend = legend_position,
+        legend = list(x = 1.1, y = 0.5),
         height = "1400px",
         legend = list(
           xanchor = "auto",
